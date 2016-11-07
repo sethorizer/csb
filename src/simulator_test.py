@@ -141,6 +141,8 @@ if __name__ == '__main__':
             action=OnlyDisabledList)
 
     args = parser.parse_args()
+    if args.disabled == None:
+        args.disabled = []
 
     simulator_pid = subprocess.Popen([args.binary], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             bufsize=1, universal_newlines=True, close_fds=ON_POSIX)
@@ -150,7 +152,8 @@ if __name__ == '__main__':
     for replay_file in args.replays:
         fn = replay_file.name
         for rnd, (tags, input_data, move_data, output_data) in enumerate(read_replay(replay_file)):
-            for cat in category_names:
+            filtered_names = [ c  for i, c in enumerate(category_names) if i+1 not in args.disabled ]
+            for cat in filtered_names:
                 if not (len(category_tag_sets[cat][1]) == 0 or \
                         category_tag_sets[cat][0].issubset(set(tags)) and \
                         set(tags).issubset(category_tag_sets[cat][1])):
