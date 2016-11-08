@@ -29,6 +29,7 @@ parser.add_argument('--replays',
         type=argparse.FileType('r'),
         required=True,
         help='replay files to use for generating tests')
+parser.add_argument('--gui',action='store_true')
 parser.add_argument('-v', '--verbose', action='count', default=0)
 
 # more arguments added further down based on test_categories
@@ -105,12 +106,6 @@ def read_replay(replay_file):
                 move_data = []
                 output_data = []
 
-#from stackoverflow.com/questions/375427/non-blocking-read-on-a-subprocess-pipe-in-python
-def enqueue_output(out, queue): 
-    for line in iter(out.readline, b''):
-        queue.put(line)
-    out.close()
-
 class OnlyDisabledList(argparse.Action):
     def __call__(self, parser, namespace, values, option_string):
         r_list = []
@@ -144,6 +139,24 @@ if __name__ == '__main__':
     if args.disabled == None:
         args.disabled = []
 
+    if args.gui:
+        import tkinter as tk
+        import csb_gui, threading
+
+        root = tk.Tk()
+        root.title('CSB Simulator - Replay')
+        g = csb_gui.GUI(root)
+        gui_pods = []
+        for i in range(4):
+            gui_pods.append(csb_gui.Pod(g.canvas, i))
+
+        def gui_thread():
+            root.mainloop()
+
+        gui_thread = threading.Thread(target=gui_thread)
+        gui_thread.daemon = True
+        gui_thread.start()
+
     simulator_pid = subprocess.Popen([args.binary], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             bufsize=1, universal_newlines=True, close_fds=ON_POSIX)
 
@@ -160,16 +173,29 @@ if __name__ == '__main__':
                     continue
 
                 # category found, executing test
-                for in_d in input_data:
+                for i, in_d in enumerate(input_data):
                     print(*in_d, file=simulator_pid.stdin)
+                    if args.gui:
+                        gui_pods[i].p = int(in_d[0]) + int(in_d[1]) * 1j
+                        gui_pods[i].v = int(in_d[2]) + int(in_d[3]) * 1j
+                        gui_pods[i].a = int(in_d[4])
+
                 for mo_d in move_data:
                     print(*mo_d, file=simulator_pid.stdin)
+
+                if args.gui:
+                    input() # wait for enter
+
                 t_data = []
                 return_values = []
                 for i, ou_d in enumerate(output_data):
                     r_vals = simulator_pid.stdout.readline().split()
                     return_values.append(r_vals)
                     t_data.append( [abs(int(r_vals[j]) - int(ou_d[j])) for j in range(7)] )
+                    if args.gui:
+                        gui_pods[i].p = int(ou_d[0]) + int(ou_d[1]) * 1j
+                        gui_pods[i].v = int(ou_d[2]) + int(ou_d[3]) * 1j
+                        gui_pods[i].a = int(ou_d[4])
 
                 # statistics
                 for it in sum(t_data, []): # XXX itertools?
@@ -211,6 +237,8 @@ if __name__ == '__main__':
                                     print(table_chars[3], end='')
                             print('   ', ed)
                         print()
+                if args.gui:
+                    input() # wait for enter
                 break
 
     simulator_pid.kill()
