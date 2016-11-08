@@ -191,7 +191,7 @@ if __name__ == '__main__':
                 for i, ou_d in enumerate(output_data):
                     r_vals = simulator_pid.stdout.readline().split()
                     return_values.append(r_vals)
-                    t_data.append( [abs(int(r_vals[j]) - int(ou_d[j])) for j in range(7)] )
+                    t_data.append( [(abs(int(r_vals[j]) - int(ou_d[j])) if tval_protocol_order[j] != "ANGLE" else abs(int(r_vals[j]) % 360 - int(ou_d[j]) % 360)) for j in range(7)] )
                     if args.gui:
                         gui_pods[i].p = int(ou_d[0]) + int(ou_d[1]) * 1j
                         gui_pods[i].v = int(ou_d[2]) + int(ou_d[3]) * 1j
