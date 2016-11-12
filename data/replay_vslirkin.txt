@@ -1,5 +1,6 @@
 Replay between sethorizer and Lirkin
 where sethorizer wins!
+CHECKPOINTS 6547 5236 11293 2801 7571 6807
 Round 1 of 109
 tags: BOOST
 IN 5777 4903 0 0 340 0 0

@@ -1,5 +1,6 @@
 Replay between sethorizer and epoxyPilot
 where epoxyPilot wins!
+CHECKPOINTS 8711 7476 7238 2357 3547 5118 13803 4930 11127 2635
 Round 1 of 218
 tags: BOOST HAS_LOW_IMPACT SINGLE_COLLISION
 IN 8231 7616 0 0 259 0 0

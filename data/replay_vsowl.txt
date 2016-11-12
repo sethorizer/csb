@@ -1,5 +1,6 @@
 Replay between sethorizer and Owl
 where Owl wins!
+CHECKPOINTS 13262 5513 9380 1729 3818 4656 8090 7881
 Round 1 of 136
 tags: BOOST
 IN 12902 5892 0 0 233 0 0

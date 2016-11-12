@@ -1,5 +1,6 @@
 Replay between sethorizer and pb4GOD
 where pb4GOD wins!
+CHECKPOINTS 13326 2538 12876 7023 5644 2690 4272 7407
 Round 1 of 179
 tags: MOVE_ONLY
 IN 13995 2399 0 0 102 0 0

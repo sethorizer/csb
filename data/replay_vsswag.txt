@@ -1,5 +1,6 @@
 Replay between sethorizer and SwagColoredKitteh
 where SwagColoredKitteh wins!
+CHECKPOINTS 11297 2944 7384 6737 6081 5348
 Round 1 of 121
 tags: BOOST
 IN 11654 3181 0 0 138 0 0

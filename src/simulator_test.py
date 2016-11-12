@@ -140,22 +140,8 @@ if __name__ == '__main__':
         args.disabled = []
 
     if args.gui:
-        import tkinter as tk
-        import csb_gui, threading
-
-        root = tk.Tk()
-        root.title('CSB Simulator - Replay')
-        g = csb_gui.GUI(root)
-        gui_pods = []
-        for i in range(4):
-            gui_pods.append(csb_gui.Pod(g.canvas, i))
-
-        def gui_thread():
-            root.mainloop()
-
-        gui_thread = threading.Thread(target=gui_thread)
-        gui_thread.daemon = True
-        gui_thread.start()
+        import csb_gui
+        gui_thread = csb_gui.GUI()
 
     simulator_pid = subprocess.Popen([args.binary], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             bufsize=1, universal_newlines=True, close_fds=ON_POSIX)
@@ -164,6 +150,18 @@ if __name__ == '__main__':
 
     for replay_file in args.replays:
         fn = replay_file.name
+        # read file header
+        gui_thread.set_checkpoints([])
+        while True:
+            l = replay_file.readline()
+            if l.startswith('Round'):
+                break
+            elif l.startswith('CHECKPOINTS'):
+                cps = l.split()[1:]
+                cps = list(zip(*[iter(cps)]*2))
+                gui_thread.set_checkpoints(cps)
+
+        replay_file.seek(0)
         for rnd, (tags, input_data, move_data, output_data) in enumerate(read_replay(replay_file)):
             filtered_names = [ c  for i, c in enumerate(category_names) if i+1 not in args.disabled ]
             for cat in filtered_names:
@@ -175,10 +173,10 @@ if __name__ == '__main__':
                 # category found, executing test
                 for i, in_d in enumerate(input_data):
                     print(*in_d, file=simulator_pid.stdin)
-                    if args.gui:
-                        gui_pods[i].p = int(in_d[0]) + int(in_d[1]) * 1j
-                        gui_pods[i].v = int(in_d[2]) + int(in_d[3]) * 1j
-                        gui_pods[i].a = int(in_d[4])
+
+                if args.gui:
+                    print('Round:', rnd)
+                    gui_thread.show_position([in_d[:5] for in_d in input_data])
 
                 for mo_d in move_data:
                     print(*mo_d, file=simulator_pid.stdin)
@@ -192,10 +190,9 @@ if __name__ == '__main__':
                     r_vals = simulator_pid.stdout.readline().split()
                     return_values.append(r_vals)
                     t_data.append( [(abs(int(r_vals[j]) - int(ou_d[j])) if tval_protocol_order[j] != "ANGLE" else abs((int(r_vals[j]) - int(ou_d[j]) + 180) % 360 - 180)) for j in range(7)] )
-                    if args.gui:
-                        gui_pods[i].p = int(ou_d[0]) + int(ou_d[1]) * 1j
-                        gui_pods[i].v = int(ou_d[2]) + int(ou_d[3]) * 1j
-                        gui_pods[i].a = int(ou_d[4])
+
+                if args.gui:
+                    gui_thread.show_position([ou_d[:5] for ou_d in output_data])
 
                 # statistics
                 for it in sum(t_data, []): # XXX itertools?

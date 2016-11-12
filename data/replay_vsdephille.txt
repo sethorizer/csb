@@ -1,5 +1,6 @@
 Replay between sethorizer and DePhille
 where sethorizer wins!
+CHECKPOINTS 10766 2306 8684 7452 7165 2164 3776 5360 13521 5237
 Round 1 of 221
 tags: BOOST
 IN 11124 2438 0 0 116 0 0

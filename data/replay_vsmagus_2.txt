@@ -1,5 +1,6 @@
 Replay between sethorizer and Magus
 where Magus wins!
+CHECKPOINTS 5106 5173 11504 5943 9092 1835
 Round 1 of 133
 tags: BOOST
 IN 5101 4756 0 0 12 0 0

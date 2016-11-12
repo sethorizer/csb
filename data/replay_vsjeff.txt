@@ -1,5 +1,6 @@
 Replay between sethorizer and Jeff06
 where Jeff06 wins!
+CHECKPOINTS 13520 4996 10815 2350 8701 7384 7292 2315 3821 5416
 Round 1 of 240
 tags: MOVE_ONLY
 IN 13491 5431 0 0 228 0 0

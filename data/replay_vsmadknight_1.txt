@@ -1,5 +1,6 @@
 Replay between sethorizer and MadKnight
 where MadKnight wins!
+CHECKPOINTS 8711 7306 7087 2224 3676 5189 13589 4997 10707 2287
 Round 1 of 207
 tags: MOVE_ONLY
 IN 8223 7616 0 0 259 0 0
