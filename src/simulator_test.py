@@ -1,11 +1,11 @@
 import subprocess
-import sys, os
+import sys, os, time
 import argparse
 
 ON_POSIX = 'posix' in sys.builtin_module_names
 
-tval_protocol_order = ('X', 'Y', 'Vx', 'Vy', 'ANGLE', 'SHIELD', 'BOOST')
-tval_output_order = (4, 2, 3, 0, 1, 5, 6)
+tval_protocol_order = ('X', 'Y', 'Vx', 'Vy', 'ANGLE', 'NCPID', 'SHIELD', 'BOOST')
+tval_output_order = (4, 2, 3, 0, 1, 5, 6, 7)
 max_value_len = max(len(x) for x in tval_protocol_order)
 
 def test_binary(fn): # adapted from http://stackoverflow.com/questions/377017/test-if-executable-exists-in-python
@@ -91,7 +91,9 @@ def read_replay(replay_file):
     output_data = []
     for line in replay_file:  # note that only very specific lines are interpreted
                               # to allow for additional information in later file formats
-        if line.startswith('tags:'):
+        if line.startswith('CHECKPOINTS'):
+            yield list(map(int,line.split()[1:]))
+        elif line.startswith('tags:'):
             tags = line.split()[1:]
         elif line.startswith('IN '):
             input_data.append(line.split()[1:])
@@ -142,6 +144,7 @@ if __name__ == '__main__':
     if args.gui:
         import csb_gui
         gui_thread = csb_gui.GUI()
+        time.sleep(0.001)  # XXX ugly hack, wait for GUI to initialize
 
     simulator_pid = subprocess.Popen([args.binary], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             bufsize=1, universal_newlines=True, close_fds=ON_POSIX)
@@ -150,56 +153,81 @@ if __name__ == '__main__':
 
     for replay_file in args.replays:
         fn = replay_file.name
-        # read file header
-        gui_thread.set_checkpoints([])
-        while True:
-            l = replay_file.readline()
-            if l.startswith('Round'):
-                break
-            elif l.startswith('CHECKPOINTS'):
-                cps = l.split()[1:]
-                cps = list(zip(*[iter(cps)]*2))
-                gui_thread.set_checkpoints(cps)
 
-        replay_file.seek(0)
-        for rnd, (tags, input_data, move_data, output_data) in enumerate(read_replay(replay_file)):
-            filtered_names = [ c  for i, c in enumerate(category_names) if i+1 not in args.disabled ]
-            for cat in filtered_names:
+        # count the number of tests first
+        replay_reader = read_replay(replay_file)
+        next(replay_reader) # skip checkpoints for now
+        tests_todo = {}
+        filtered_names = [ c  for i, c in enumerate(category_names) if i+1 not in args.disabled ]
+        for rnd, (tags, _, _, _) in enumerate(replay_reader):
+            for cat in category_names:
                 if not (len(category_tag_sets[cat][1]) == 0 or \
                         category_tag_sets[cat][0].issubset(set(tags)) and \
                         set(tags).issubset(category_tag_sets[cat][1])):
                     continue
 
-                # category found, executing test
+                # category found, checking whether to execute test
+                if cat in filtered_names:
+                    tests_todo[rnd] = cat
+                break
+
+        replay_file.seek(0)
+        replay_reader = read_replay(replay_file)
+
+        cps = next(replay_reader)
+        cps = list(zip(*[iter(cps)]*2))
+        print(len(cps), file=simulator_pid.stdin)
+        for cp in cps:
+            print(*cp, file=simulator_pid.stdin)
+
+        if args.gui:
+            # read file header
+            gui_thread.set_checkpoints(cps)
+
+        print(len(tests_todo), file=simulator_pid.stdin)
+
+        for rnd, (_, input_data, move_data, output_data) in enumerate(replay_reader):
+            if rnd in tests_todo:
                 for i, in_d in enumerate(input_data):
                     print(*in_d, file=simulator_pid.stdin)
-
-                if args.gui:
-                    print('Round:', rnd)
-                    gui_thread.show_position([in_d[:5] for in_d in input_data])
+                    #print(*in_d, file=sys.stderr)
 
                 for mo_d in move_data:
                     print(*mo_d, file=simulator_pid.stdin)
-
-                if args.gui:
-                    input() # wait for enter
+                    #print(*mo_d, file=sys.stderr)
 
                 t_data = []
                 return_values = []
                 for i, ou_d in enumerate(output_data):
                     r_vals = simulator_pid.stdout.readline().split()
+                    if len(r_vals) != len(tval_protocol_order):
+                        print('ERROR: simulator output has wrong number of values. Expected:', len(tval_protocol_order), 'given:', len(r_vals))
+                        exit(-1)
                     return_values.append(r_vals)
-                    t_data.append( [(abs(int(r_vals[j]) - int(ou_d[j])) if tval_protocol_order[j] != "ANGLE" else abs((int(r_vals[j]) - int(ou_d[j]) + 180) % 360 - 180)) for j in range(7)] )
-
+                    #print(r_vals, ou_d, file=sys.stderr)
+                    t_vals = []
+                    for j in range(len(tval_protocol_order)):
+                        if tval_protocol_order[j] == 'ANGLE':
+                            t_vals.append(abs(round(float(r_vals[j]) - float(ou_d[j]) + 180) % 360 - 180))
+                        elif tval_protocol_order[j] == 'NCPID':
+                            t_vals.append(min((int(r_vals[j]) - int(ou_d[j])) % len(cps), (int(ou_d[j]) - int(r_vals[j])) % len(cps)))
+                        else:
+                            t_vals.append(abs(int(r_vals[j]) - int(ou_d[j])))
+                    t_data.append(t_vals)
                 if args.gui:
-                    gui_thread.show_position([ou_d[:5] for ou_d in output_data])
+                    if any(td_v != 0 for td in t_data[-4:] for td_v in td):
+                        print('Round:', rnd)
+
+                        gui_thread.show_position([in_d[:4] + [round(float(in_d[4])),] for in_d in input_data])
+                        input() # wait for enter
+                        gui_thread.show_position([ou_d[:4] + [round(float(ou_d[4])),] for ou_d in output_data])
 
                 # statistics
                 for it in sum(t_data, []): # XXX itertools?
                     if it < 3:
-                        test_category_statistics[cat][it] += 1
+                        test_category_statistics[tests_todo[rnd]][it] += 1
                     else:
-                        test_category_statistics[cat][3] += 1
+                        test_category_statistics[tests_todo[rnd]][3] += 1
 
                 # print data
                 table = []
@@ -214,17 +242,17 @@ if __name__ == '__main__':
                                         output_data[pod][t_idx]))
                 if len(table) > 0:
                     if args.verbose > 1:
-                            print('Test', cat, 'with data from round', rnd, 'of', fn)
-                            columns = len(table[0])
-                            c_width = [ max(len(tl[i]) for tl in table) for i in range(columns) ]
-                            format_str = 'pod {:>%s}, value {:>%s}: differs by {:>%s}, is: {:>%s}, expected: {:>%s}'
-                            format_str = format_str % tuple(c_width)
-                            for tl in table:
-                                print(format_str.format(*tl))
-                            print()
+                        print('Test', tests_todo[rnd], 'with data from round', rnd, 'of', fn)
+                        columns = len(table[0])
+                        c_width = [ max(len(tl[i]) for tl in table) for i in range(columns) ]
+                        format_str = 'pod {:>%s}, value {:>%s}: differs by {:>%s}, is: {:>%s}, expected: {:>%s}'
+                        format_str = format_str % tuple(c_width)
+                        for tl in table:
+                            print(format_str.format(*tl))
+                        print()
                     elif args.verbose == 1:
                         table_chars = {0:'.', 1:'*', 2:'o', 3:'#'}
-                        extra_data = ['test ' + cat, '', 'round: ' + str(rnd), ' from: ' + fn]
+                        extra_data = ['test ' + tests_todo[rnd], '', 'round: ' + str(rnd), ' from: ' + fn]
                         for tl, ed in zip(t_data, extra_data):
                             print('  ', end='')
                             for t_val in tl:
@@ -234,10 +262,26 @@ if __name__ == '__main__':
                                     print(table_chars[3], end='')
                             print('   ', ed)
                         print()
-                if args.gui:
-                    input() # wait for enter
-                break
+                    if args.verbose > 2:
+                        print('Full test data:')
+                        # angle, vx->nvx vy->nvy x->nx y->ny pncpid cpx cpy
+                        dtable = []
+                        for i in range(4):
+                            od = output_data[i]
+                            ind = input_data[i]
+                            dtable.append([round(float(od[4]),3), move_data[i][2], ind[2], ind[3], od[2], od[3], ind[0], ind[1], od[0], od[1], ind[5], cps[int(ind[5])][0], cps[int(ind[5])][1]])
+                        columns = len(dtable[0])
+                        c_width = [ max(len(str(tl[i])) for tl in dtable) for i in range(columns) ]
+                        format_str = ' angle {:>%s}, thrust {:>%s}, V ({:>%s}, {:>%s}) -> ({:>%s}, {:>%s}), P ({:>%s}, {:>%s}) -> ({:>%s}, {:>%s}), input ncpid {:>%s} at ({:>%s}, {:>%s})'
+                        format_str = format_str % tuple(c_width)
+                        for tl in dtable:
+                            print(format_str.format(*tl))
+                        print()
+                           
 
+                if args.gui:
+                    if any(td_v != 0 for td in t_data[-4:] for td_v in td):
+                        input() # wait for enter
     simulator_pid.kill()
 
     s_columns = 4
